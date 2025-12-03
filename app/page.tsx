@@ -13,7 +13,7 @@ interface Course {
 
 export default function Home() {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [registeredCourseIds, setRegisteredCourseIds] = useState<number[]>([]); // 🆕 Stores IDs of courses you own
+  const [registeredCourseIds, setRegisteredCourseIds] = useState<number[]>([]); // Store IDs of courses you own
   const [searchQuery, setSearchQuery] = useState('');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -21,15 +21,16 @@ export default function Home() {
 
   useEffect(() => {
     const checkSessionAndFetchData = async () => {
-      // 1. Check if User is Logged In
+      // 1. Get the current user
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 🛑 BOUNCER LOGIC: If no user, kick them to Login immediately
+      // 🛑 STRICT GATE: If not logged in, stop everything and go to Login
       if (!user) {
         router.push('/login');
         return; 
       }
 
+      // If we are here, the user is logged in
       setUser(user);
 
       // 2. Fetch All Courses
@@ -38,20 +39,17 @@ export default function Home() {
         .select('*')
         .order('id');
       
-      if (courseError) {
-        alert("Error loading courses: " + courseError.message);
-      } else {
-        setCourses(coursesData || []);
-      }
+      if (courseError) console.error(courseError);
+      setCourses(coursesData || []);
 
-      // 3. 🆕 Fetch User's Existing Registrations (To show the Tick Mark ✅)
-      const { data: myRegs, error: regError } = await supabase
+      // 3. Fetch YOUR Registrations (To show the Tick Mark ✅)
+      const { data: myRegs } = await supabase
         .from('registrations')
         .select('course_id')
         .eq('student_email', user.email);
 
       if (myRegs) {
-        // Extract just the IDs (e.g., [1, 3]) so we can easily check them later
+        // Extract just the IDs (e.g., [1, 3])
         const myIds = myRegs.map((r: any) => r.course_id);
         setRegisteredCourseIds(myIds);
       }
@@ -71,9 +69,6 @@ export default function Home() {
     const confirm = window.confirm(`Register for ${courseTitle}?`);
     if (!confirm) return;
 
-    // Optimistic Update: Show the tick immediately while waiting for server
-    // (Optional, but feels faster)
-    
     const res = await fetch('/api/register', {
       method: 'POST',
       body: JSON.stringify({ 
@@ -86,23 +81,33 @@ export default function Home() {
     const result = await res.json();
     if (res.ok) {
       alert("✅ Registration Successful!");
-      // Reload page to update seat counts and confirm state
-      window.location.reload();
+      window.location.reload(); // Reload to update the Tick Mark
     } else {
       alert("❌ Error: " + result.error);
     }
   };
 
-  // 🔍 SEARCH FILTER LOGIC
+  // 🔍 SEARCH LOGIC
   const filteredCourses = courses.filter((course) =>
     course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // 🛑 RENDER GUARD: While loading, show spinner.
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Checking authorization...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-xl text-indigo-600 font-semibold animate-pulse">Checking access...</div>
+      </div>
+    );
   }
 
+  // 🛑 RENDER GUARD: If no user, show NOTHING (Redirect is happening)
+  if (!user) {
+    return null; 
+  }
+
+  // ✅ ONLY RENDER THIS IF USER IS LOGGED IN
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
       {/* Navbar */}
@@ -111,7 +116,7 @@ export default function Home() {
           <h1 className="text-2xl font-bold text-indigo-600">🎓 KLE Technological University</h1>
           
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 hidden md:block">Hello, {user?.email}</span>
+            <span className="text-sm text-gray-600 hidden md:block">Hello, {user.email}</span>
             <button onClick={() => router.push('/my-dashboard')} className="text-sm font-semibold text-indigo-600 hover:underline">
               My Dashboard
             </button>
@@ -138,27 +143,24 @@ export default function Home() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full p-4 pl-12 rounded-full border border-gray-300 shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
             />
-            <svg className="w-6 h-6 text-gray-400 absolute left-4 top-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredCourses.map((course) => {
-            // 🆕 CHECK: Is the user already registered for this specific course?
+            // ✅ CHECK: Is this course in my list of IDs?
             const isRegistered = registeredCourseIds.includes(course.id);
 
             return (
-              <div key={course.id} className={`bg-white rounded-2xl shadow-lg overflow-hidden border transition-all ${isRegistered ? 'border-green-500 ring-1 ring-green-500' : 'border-gray-100 hover:shadow-xl'}`}>
+              <div key={course.id} className={`bg-white rounded-2xl shadow-lg overflow-hidden border transition-all ${isRegistered ? 'border-green-500 ring-2 ring-green-100' : 'border-gray-100 hover:shadow-xl'}`}>
                 
                 {/* Image Section */}
                 <div className="h-48 bg-gray-200 relative">
                   {course.image_url && <img src={course.image_url} alt={course.title} className="w-full h-full object-cover" />}
                   
-                  {/* Badge: Shows Seat Count OR Registered Status */}
-                  <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold shadow-sm ${isRegistered ? 'bg-green-100 text-green-700' : 'bg-white/90 text-gray-700'}`}>
-                    {isRegistered ? '✅ Registered' : `${course.available_seats} Seats Left`}
+                  {/* Badge */}
+                  <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold shadow-sm ${isRegistered ? 'bg-green-600 text-white' : 'bg-white/90 text-gray-700'}`}>
+                    {isRegistered ? 'Registered ✅' : `${course.available_seats} Seats Left`}
                   </div>
                 </div>
 
@@ -166,15 +168,13 @@ export default function Home() {
                 <div className="p-6 flex flex-col flex-grow">
                   <h3 className="text-xl font-bold text-gray-900 mb-2 flex justify-between items-center">
                     {course.title}
-                    {isRegistered && <span title="Registered">✅</span>}
                   </h3>
                   <p className="text-gray-600 mb-6 text-sm flex-grow">{course.description}</p>
                   
-                  {/* 🆕 BUTTON LOGIC */}
+                  {/* BUTTON LOGIC */}
                   {isRegistered ? (
-                    <button disabled className="w-full py-3 rounded-xl font-bold text-sm bg-green-50 text-green-700 border border-green-200 cursor-default flex justify-center items-center gap-2">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      Registered
+                    <button disabled className="w-full py-3 rounded-xl font-bold text-sm bg-green-50 text-green-700 border border-green-200 cursor-default">
+                      ✅ Already Registered
                     </button>
                   ) : (
                     <button
