@@ -13,21 +13,38 @@ interface Course {
 
 export default function Home() {
   const [courses, setCourses] = useState<Course[]>([]);
-  const [searchQuery, setSearchQuery] = useState(''); // New State for Search
+  const [searchQuery, setSearchQuery] = useState('');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: coursesData } = await supabase.from('courses').select('*').order('id');
-      if (coursesData) setCourses(coursesData);
+      console.log("Attempting to fetch courses...");
 
+      // 1. Ask Supabase for courses AND any errors
+      const { data, error } = await supabase.from('courses').select('*').order('id');
+
+      // 🛑 DEBUGGING BLOCK: This will tell us why it's failing
+      if (error) {
+        console.error("Supabase Error:", error);
+        alert("CRITICAL ERROR: " + error.message + "\n\nCheck your Vercel Environment Variables!");
+      } 
+      else if (!data || data.length === 0) {
+        console.warn("Supabase connected, but table is empty.");
+        // Uncomment the line below if you want an alert for empty tables too:
+        // alert("Connected to Database, but found 0 courses. Did you run the SQL INSERT?");
+      }
+
+      setCourses(data || []);
+
+      // 2. Check User Session
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
 
       setLoading(false);
     };
+    
     fetchData();
   }, []);
 
@@ -64,7 +81,7 @@ export default function Home() {
     }
   };
 
-  // 🔍 THE SEARCH LOGIC
+  // 🔍 SEARCH FILTER LOGIC
   const filteredCourses = courses.filter((course) =>
     course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.description.toLowerCase().includes(searchQuery.toLowerCase())
@@ -72,6 +89,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
+      {/* Navbar */}
       <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-indigo-600">🎓 KLE Technological University</h1>
@@ -80,6 +98,9 @@ export default function Home() {
             {user ? (
               <div className="flex items-center gap-4">
                 <span className="text-sm text-gray-600 hidden md:block">Hello, {user.email}</span>
+                <button onClick={() => router.push('/my-dashboard')} className="text-sm font-semibold text-indigo-600 hover:underline">
+                  My Dashboard
+                </button>
                 <button onClick={handleLogout} className="text-sm font-semibold text-red-600 hover:text-red-700">
                   Logout
                 </button>
@@ -100,7 +121,7 @@ export default function Home() {
             Explore our curriculum and secure your future.
           </p>
 
-          {/* 🔍 SEARCH BAR UI */}
+          {/* Search Bar */}
           <div className="max-w-md mx-auto relative">
             <input
               type="text"
@@ -119,7 +140,6 @@ export default function Home() {
           <div className="text-center py-20 text-gray-500">Loading courses...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* USE filteredCourses INSTEAD OF courses */}
             {filteredCourses.length > 0 ? (
               filteredCourses.map((course) => (
                 <div key={course.id} className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100 flex flex-col hover:shadow-xl transition-all">
