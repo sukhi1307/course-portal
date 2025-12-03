@@ -2,7 +2,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/app/utils/supabase';
 import { useRouter } from 'next/navigation';
-import { RadialBarChart, RadialBar, Legend, ResponsiveContainer, Tooltip } from 'recharts';
+import { 
+  RadialBarChart, RadialBar, Legend, ResponsiveContainer, Tooltip, 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid 
+} from 'recharts';
 
 export default function MyDashboard() {
   const [data, setData] = useState<any[]>([]);
@@ -11,7 +14,6 @@ export default function MyDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // 1. Get Logged In User
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
@@ -19,53 +21,57 @@ export default function MyDashboard() {
       }
       setUser(user);
 
-      // 2. Fetch their attendance data linked to course names
       const { data: attendanceData } = await supabase
         .from('attendance')
         .select(`
           percentage,
+          isa1,
+          isa2,
+          esa,
           courses ( title )
         `)
         .eq('student_email', user.email);
 
-      // 3. Format data for the Chart
       if (attendanceData) {
         const chartData = attendanceData.map((item: any, index: number) => ({
           name: item.courses?.title || 'Course',
-          uv: item.percentage, // The percentage value (0-100)
-          fill: ['#8884d8', '#83a6ed', '#8dd1e1', '#82ca9d'][index % 4], // Different colors
+          // Data for Attendance Chart
+          attendance: item.percentage,
+          fill: ['#8884d8', '#83a6ed', '#8dd1e1', '#82ca9d'][index % 4],
+          // Data for Marks Bar Chart
+          ISA1: item.isa1,
+          ISA2: item.isa2,
+          ESA: item.esa, 
         }));
         setData(chartData);
       }
     };
     fetchData();
-  }, []);
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
-      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden p-8">
+      <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden p-8">
         
         {/* Header */}
         <div className="mb-8 flex justify-between items-center border-b pb-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">My Attendance Dashboard</h1>
-            <p className="text-gray-500">Welcome back, {user?.email}</p>
+            <h1 className="text-3xl font-bold text-gray-800">Student Performance</h1>
+            <p className="text-gray-500">Academic Dashboard for {user?.email}</p>
           </div>
           <button onClick={() => router.push('/')} className="text-indigo-600 font-semibold hover:underline">
             ← Back to Courses
           </button>
         </div>
 
-        {/* The Chart Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        {/* Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
           
-          {/* Left: The Visual Chart */}
-          <div className="h-80 w-full relative">
-             <h3 className="text-lg font-semibold text-gray-700 mb-2 text-center">Attendance Overview</h3>
-             <ResponsiveContainer width="100%" height="100%">
+          {/* Left: Attendance (Radial Chart) */}
+          <div className="h-96 border p-4 rounded-xl shadow-sm bg-slate-50">
+             <h3 className="text-xl font-bold text-gray-700 mb-4 text-center">Attendance %</h3>
+             <ResponsiveContainer width="100%" height="90%">
               <RadialBarChart 
-                cx="50%" 
-                cy="50%" 
                 innerRadius="10%" 
                 outerRadius="80%" 
                 barSize={20} 
@@ -73,38 +79,33 @@ export default function MyDashboard() {
                 startAngle={180} 
                 endAngle={0}
               >
-                <RadialBar
-                  label={{ position: 'insideStart', fill: '#fff' }}
-                  background
-                  dataKey="uv"
-                />
-                <Legend iconSize={10} layout="vertical" verticalAlign="middle" wrapperStyle={{ top: '50%', right: 0, transform: 'translate(0, -50%)', lineHeight: '24px' }} />
+                <RadialBar label={{ position: 'insideStart', fill: '#fff' }} background dataKey="attendance" />
+                <Legend iconSize={10} verticalAlign="bottom" height={36}/>
                 <Tooltip />
               </RadialBarChart>
             </ResponsiveContainer>
-            
-            {/* Value Overlay */}
-            <div className="absolute bottom-10 left-0 right-0 text-center text-sm text-gray-400">
-               Based on Registered Courses
-            </div>
           </div>
 
-          {/* Right: The List Details */}
-          <div className="space-y-4">
-             {data.map((item, idx) => (
-               <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border hover:border-indigo-300 transition">
-                 <div>
-                   <h4 className="font-bold text-gray-800">{item.name}</h4>
-                   <div className="text-xs text-gray-500">Status: {item.uv >= 75 ? 'On Track' : 'Risk'}</div>
-                 </div>
-                 <div className={`text-xl font-bold ${item.uv < 75 ? 'text-red-500' : 'text-green-600'}`}>
-                   {item.uv}%
-                 </div>
-               </div>
-             ))}
-             {data.length === 0 && (
-               <div className="text-center text-gray-500 py-10">
-                 You haven't registered for any courses yet.
+          {/* Right: Marks (Bar Chart) - NEW GRAPH! */}
+          <div className="h-96 border p-4 rounded-xl shadow-sm bg-slate-50">
+             <h3 className="text-xl font-bold text-gray-700 mb-4 text-center">Exam Marks Comparison</h3>
+             
+             {data.length > 0 ? (
+               <ResponsiveContainer width="100%" height="90%">
+                 <BarChart data={data}>
+                   <CartesianGrid strokeDasharray="3 3" />
+                   <XAxis dataKey="name" tick={{fontSize: 12}} interval={0} />
+                   <YAxis label={{ value: 'Marks', angle: -90, position: 'insideLeft' }} />
+                   <Tooltip />
+                   <Legend />
+                   <Bar dataKey="ISA1" fill="#8884d8" name="ISA 1 (25)" />
+                   <Bar dataKey="ISA2" fill="#82ca9d" name="ISA 2 (25)" />
+                   <Bar dataKey="ESA" fill="#ffc658" name="ESA (100)" />
+                 </BarChart>
+               </ResponsiveContainer>
+             ) : (
+               <div className="flex items-center justify-center h-full text-gray-400">
+                 No exam data available.
                </div>
              )}
           </div>
